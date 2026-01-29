@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getLocation, getLatestByLocation, type LatestMeasurement, type Location} from "../services/openaq";
+import LineChartCard from "../components/chart/LineChartCard"
+import { toChartPoints } from "../utils/toChartPoints";
+
+
+
 
 export default function Dashboard() {
     const [locationId,setLocationId] = useState(2178); // abrir la pagina con contenido
@@ -41,6 +46,10 @@ export default function Dashboard() {
 
 
     },[locationId]);
+
+
+
+     const chartData = latest ? toChartPoints(latest) : [];
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
@@ -90,6 +99,11 @@ export default function Dashboard() {
                 ))}
               </ul>
             )}
+              {!loading && !error && (
+                <div className='mt-6'>
+                  <LineChartCard title="Latest measurments (value over time)" data={chartData} />
+                </div>
+              )}
           </div>
         )}
     </div>
