@@ -1,0 +1,4 @@
+GET https://api.openaq.org/v3/locations/2178
+X-API-Key: 3a08df6f2bebafe04c03e7f299a0022e85fe1a148bf6fb54608b50d951e87b67
+
+
