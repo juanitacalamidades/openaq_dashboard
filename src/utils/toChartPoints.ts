@@ -14,3 +14,7 @@ export function toChartPoints( latest: LatestMeasurement[]): ChartPoint[] {
         value: m.value
     }));
 }
+
+
+// At this point the chart visualizes the latest available measurements for a location. V
+// Values are shown without grouping by parameter, as the goal is to demonstrate data fetching, transformation, and visualization patterns.

@@ -1,8 +1,8 @@
 const BASE_URL = "http://localhost:3001/api/openaq" 
-const API_KEY = import.meta.env.VITE_OPENAQ_API_KEY as string; //type assertion
+
 
 if(!BASE_URL) throw new Error("Falta url");
-if(!API_KEY) throw new Error("Falta API KEY");
+
 
 
 // Definit tipos
@@ -19,9 +19,7 @@ export type OpenAQResponse<T> = {
 }
 
 async function openaqFetch<T>(path : string): Promise<OpenAQResponse<T>> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        headers : {"X-API-Key" : API_KEY}
-    });
+    const res = await fetch(`${BASE_URL}${path}`);
 
     // Cubrir todos los errores HTTP
     if(!res.ok) {

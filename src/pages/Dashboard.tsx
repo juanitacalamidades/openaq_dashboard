@@ -31,6 +31,10 @@ export default function Dashboard() {
                 setLocation(locationRes.results[0] ?? null); // si viene undefined, lo convierte en null; location acepta null (?)
                 setLatest(latestRes.results ?? [])
 
+                // console.log("latestRes sample: ", latestRes.results?.[0]);
+                // console.log("latestRes results: ", latestRes.results);
+
+
             }catch(e) {
                 if(cancelled) return;
                 setError(e instanceof Error ? e.message : "Error"); // instanceof Error es para tratar bien el tipo en TS/JS 
@@ -86,24 +90,10 @@ export default function Dashboard() {
             {latest.length === 0 ? (
               <p className="mt-2 text-sm opacity-80">No latest measurements found for this location.</p>
             ) : (
-              <ul className="mt-2 space-y-2">
-                {latest.map((m) => (
-                  <li key={`${m.sensorsId}-${m.datetime.utc}`} className="border rounded p-3">
-                    <div className="text-sm">
-                      <strong>Value:</strong> {m.value}
-                    </div>
-                    <div className="text-xs opacity-80">
-                      UTC: {m.datetime.utc} · Local: {m.datetime.local}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-              {!loading && !error && (
-                <div className='mt-6'>
+               <div className='mt-6'>
                   <LineChartCard title="Latest measurments (value over time)" data={chartData} />
                 </div>
-              )}
+            )}
           </div>
         )}
     </div>
