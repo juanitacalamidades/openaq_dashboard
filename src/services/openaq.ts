@@ -47,6 +47,18 @@ export type LatestMeasurement = {
     locationsId : number; 
 }
 
+export type Sensor = {
+    id : number;
+    name? : string;
+    parameter? : {
+        id?: number;
+        name?:string;
+        units?:string;
+        displayName?:string;
+    }
+    unit? : string;
+}
+
 export async function getLocation( id : number ) {
    return openaqFetch<Location>(`/locations/${id}`);
 }
@@ -55,3 +67,8 @@ export async function getLocation( id : number ) {
 export async function getLatestByLocation( id : number ) {
     return openaqFetch<LatestMeasurement>(`/locations/${id}/latest`);    // endpoint documentado en --> https://docs.openaq.org/resources/latest
 }
+
+export async function getSensor( id : number ) {
+    return openaqFetch<Sensor>(`/sensors/${id}`)
+}
+

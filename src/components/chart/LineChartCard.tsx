@@ -6,17 +6,19 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 type Props = {
     title: string;
     data: ChartPoint[];
+    subtitle?: string;
 }
 
-export default function LineChartCard( {title,data} : Props ) {
+export default function LineChartCard( {title,subtitle,data} : Props ) {
     return (
         <section className="border rounded p-4">
             <h4 className="font-medium">{title}</h4>
-
+            {subtitle && <p className="text-sm opacity-80">{subtitle}</p>}
             <div className="mt-4 h-64">
                 {data.length === 0 ? (
                     <p className="text-sm opacity-80">No data to display</p>
                 ) : (
+                    <div className="w-full h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data}>
                             <CartesianGrid strokeDasharray="3 3" />
@@ -26,6 +28,7 @@ export default function LineChartCard( {title,data} : Props ) {
                             <Line type="monotone" dataKey="value" dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
+                    </div>
                 )}
 
             </div>
