@@ -1,4 +1,4 @@
-import type { LatestMeasurement } from "../services/openaq";
+import type { LatestMeasurement, Measurement } from "../services/openaq";
 import type { ChartPoint } from "../types/chart";
 
 // Convierte las mediciones con tipo LatestMeasurement[] en ChartPoint[] para gráficos
@@ -8,13 +8,42 @@ import type { ChartPoint } from "../types/chart";
 //.filter para evitar valores raros o NaN; 
 // .map para convertir cada medición en puntos del gráfico
 
-export function toChartPoints( latest: LatestMeasurement[]): ChartPoint[] {
-    return latest.filter( (m) => Number.isFinite(m.value) ).map( (m) => ({ 
-        time: new Date(m.datetime.utc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit"}),
-        value: m.value
+export function toChartPoints(latest: LatestMeasurement[]): ChartPoint[] {
+  return latest
+    .filter((m) => Number.isFinite(m.value) && !!m.datetime?.utc)
+    .map((m) => ({
+      time: new Date(m.datetime.utc).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      value: m.value,
     }));
 }
 
-
 // At this point the chart visualizes the latest available measurements for a location. V
 // Values are shown without grouping by parameter, as the goal is to demonstrate data fetching, transformation, and visualization patterns.
+
+
+
+
+
+
+
+export function measurementsToChartPoints(items: Measurement[]): ChartPoint[] {
+  return items
+    .filter((m) => Number.isFinite(m.value))
+    .map((m) => {
+      const utc =
+        m.period?.datetimeFrom?.utc ??
+        m.date?.utc;
+
+      if (!utc) return null;
+
+      return {
+        time: new Date(utc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        value: m.value,
+      } satisfies ChartPoint;
+    })
+    .filter((p): p is ChartPoint => p !== null);
+}
+

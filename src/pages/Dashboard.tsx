@@ -1,152 +1,190 @@
-import { useState, useEffect, useMemo } from 'react';
-import { getLocation, getLatestByLocation, getSensor, type LatestMeasurement, type Location } from "../services/openaq";
-import LineChartCard from "../components/chart/LineChartCard"
-import { toChartPoints } from "../utils/toChartPoints";
+import { useState, useEffect, useMemo } from "react";
+import LineChartCard from "../components/chart/LineChartCard";
+import MapView from "../components/map/MapView";
+
+import {
+  getLocation,
+  getLatestByLocation,
+  getSensor,
+  getMeasurementsBySensor,
+  type LatestMeasurement,
+  type Location,
+  type Measurement,
+} from "../services/openaq";
+
+import { measurementsToChartPoints } from "../utils/toChartPoints";
 import { getSensorParameterName, getSensorUnit } from "../utils/sensorInfo";
 
-
-
-
 export default function Dashboard() {
-    const [locationId,setLocationId] = useState(2178); // abrir la pagina con contenido
-    const [location,setLocation] = useState<Location | null>(null); // hay datos | no se han cargado o no existe la ubicación; null se maneja en el render
-    const [latest,setLatest] = useState<LatestMeasurement[]>([]); // siempre array
-    const [sensorsMap, setSensorsMap] = useState<Record<number, { parameterName?: string; unit?: string}>>({}); // Record es un diccionario {3916: {...}, 1234: {...}}
-    const [selectedParameter, setSelectedParameter] = useState<string>("no2");
-    const [loading,setLoading] = useState(false);
-    const [error,setError] = useState<string | null>(null);
+  const [locationId, setLocationId] = useState(2178);
+  const [location, setLocation] = useState<Location | null>(null);
 
-    useEffect(() => {
-        let cancelled = false;
+  const [latest, setLatest] = useState<LatestMeasurement[]>([]);
+  const [sensorsMap, setSensorsMap] = useState<
+    Record<number, { parameterName?: string; unit?: string }>
+  >({});
 
-        async function load(){
-            setLoading(true);
-            setError(null);
+  const [selectedParameter, setSelectedParameter] = useState<string>("no2");
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
 
-            try {
-                const [locationRes,latestRes] = await Promise.all([ // ejecuta a las dos a la vez para reducir el tiempo de carga
-                    getLocation(locationId),
-                    getLatestByLocation(locationId)
-                ]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-                if(cancelled) return;
+  // 1) Carga base: location + latest + metadata de sensores (solo cuando cambia locationId)
+  useEffect(() => {
+    let cancelled = false;
 
-                // 1) Guardamos los resultados en variables locales (evita duplicar setState)
-                const locationResult = locationRes.results?.[0] ?? null;
-                const latestResults = latestRes.results ?? [];
+    async function loadBase() {
+      setLoading(true);
+      setError(null);
 
-                // 2). Ids únicos de sensores
-                const sensorIds = Array.from(new Set(latestResults.map( (m) => m.sensorsId)));
+      try {
+        const [locationRes, latestRes] = await Promise.all([
+          getLocation(locationId),
+          getLatestByLocation(locationId),
+        ]);
 
-                 // 3) Llamadas en paralelo a /sensors/:id 
-                const sensorResponses = await Promise.all(sensorIds.map((id) => getSensor(id)));
+        if (cancelled) return;
 
-                // 4) Construir diccionario sensorId -> {parameter,unit}
-                const nextMap: Record<number, { parameterName?: string; unit?: string }> = {};
+        const locationResult = locationRes.results?.[0] ?? null;
+        const latestResults = latestRes.results ?? [];
 
-                sensorResponses.forEach( (resp) => {
-                  const sensor = resp.results?.[0];
-                  if (sensor.id === 3916) {
-                    // console.log("SENSOR 3916 parameter:", sensor.parameter);
-                    // console.log("SENSOR 3916 parameter.units:", sensor.parameter?.units);
-                    console.log("getSensorUnit(sensor):", getSensorUnit(sensor));
-                  }
-                  if(!sensor) return;
+        // ids únicos de sensores presentes en latest
+        const sensorIds = Array.from(new Set(latestResults.map((m) => m.sensorsId)));
 
-                  const parameterName = getSensorParameterName(sensor);
-                  const unit = getSensorUnit(sensor);
+        // metadata de sensores
+        const sensorResponses = await Promise.all(sensorIds.map((id) => getSensor(id)));
 
-                  nextMap[sensor.id] = { parameterName, unit };
+        if (cancelled) return;
 
-                  
-                });
-                  console.log("nextMap[3916]:", nextMap[3916]);
-                  // 5) Actualizamos estado una sola vez por cosa
-                  setLocation(locationResult);
-                  setLatest(latestResults);
-                  setSensorsMap(nextMap);
+        const nextMap: Record<number, { parameterName?: string; unit?: string }> = {};
+        sensorResponses.forEach((resp) => {
+          const sensor = resp.results?.[0];
+          if (!sensor) return;
 
+          const parameterName = getSensorParameterName(sensor);
+          const unit = getSensorUnit(sensor);
 
-            }catch(e) {
-                if(cancelled) return;
-                setError(e instanceof Error ? e.message : "Error"); // instanceof Error es para tratar bien el tipo en TS/JS 
-            }finally { // se ejecuta siempre, loading no se queda colgado
-                setLoading(false);
-            }
-        }
+          nextMap[sensor.id] = { parameterName, unit };
+        });
 
-        load();
-        return () => {
-            cancelled = true;
-        };
+        setLocation(locationResult);
+        setLatest(latestResults);
+        setSensorsMap(nextMap);
 
+        // cuando cambia la ubicación, limpiamos mediciones históricas (hasta recargar)
+        setMeasurements([]);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-    },[locationId]);
+    loadBase();
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId]);
 
-
-
-
-      const filteredLatest = useMemo(() => {
-      const target = selectedParameter.toLowerCase();
-
-      return latest.filter(
-        (m) => (sensorsMap[m.sensorsId]?.parameterName ?? "").toLowerCase() === target
-      );
-    }, [latest, sensorsMap, selectedParameter]);
-
-
-
-    const selectedUnit = useMemo( () => {
-      const target = selectedParameter.toLowerCase();
-
-      const match = latest.find( (m) => (sensorsMap[m.sensorsId]?.parameterName ?? "").toLowerCase() === target
-    );
-      return match ? sensorsMap[match.sensorsId]?.unit : undefined;
-    }, [latest, sensorsMap, selectedParameter])
-    
-
-    const availableParameters = useMemo(() => {
+  // Parámetros disponibles para esta location (dinámico)
+  const availableParameters = useMemo(() => {
     const set = new Set<string>();
+    for (const m of latest) {
+      const name = sensorsMap[m.sensorsId]?.parameterName;
+      if (name) set.add(name.toLowerCase());
+    }
+    return Array.from(set).sort();
+  }, [latest, sensorsMap]);
 
-      for (const m of latest) {
-        const name = sensorsMap[m.sensorsId]?.parameterName;
-        if (name) set.add(name.toLowerCase());
+  // Si el parámetro seleccionado no existe en esa location, elige el primero disponible
+  useEffect(() => {
+    if (availableParameters.length === 0) return;
+    if (!availableParameters.includes(selectedParameter.toLowerCase())) {
+      setSelectedParameter(availableParameters[0]);
+    }
+  }, [availableParameters, selectedParameter]);
+
+  // 2) Carga histórico: depende de selectedParameter + latest/sensorsMap (para resolver sensorsId)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMeasurements() {
+      setError(null);
+
+      // Necesitamos latest + sensorsMap para encontrar el sensorId del parámetro
+      if (latest.length === 0 || Object.keys(sensorsMap).length === 0) {
+        setMeasurements([]);
+        return;
       }
 
-      return Array.from(set).sort(); // ["no2", "pm25", ...]
-    }, [latest, sensorsMap]);
+      const target = selectedParameter.toLowerCase();
 
+      // Busca un sensorsId que corresponda al parámetro elegido
+      const sensorIdForParameter =
+        latest.find(
+          (m) =>
+            (sensorsMap[m.sensorsId]?.parameterName ?? "").toLowerCase() === target
+        )?.sensorsId ?? null;
 
-    useEffect(() => {
-      if (availableParameters.length === 0) return;
-
-      // si el valor actual no existe, usamos el primero disponible
-      if (!availableParameters.includes(selectedParameter.toLowerCase())) {
-        setSelectedParameter(availableParameters[0]);
+      if (!sensorIdForParameter) {
+        setMeasurements([]);
+        return;
       }
-    }, [availableParameters, selectedParameter]);
 
+      setLoading(true);
+      try {
+        const measurementsRes = await getMeasurementsBySensor({
+          sensorsId: sensorIdForParameter,
+          hours: 24,
+          limit: 200,
+        });
 
-    const chartData = toChartPoints(filteredLatest)
-    
+        if (cancelled) return;
+        setMeasurements(measurementsRes.results ?? []);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Error");
+        setMeasurements([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
+    loadMeasurements();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedParameter, latest, sensorsMap]);
 
+  // Unidad del parámetro seleccionado (de metadata)
+  const selectedUnit = useMemo(() => {
+    const target = selectedParameter.toLowerCase();
+    const match = latest.find(
+      (m) => (sensorsMap[m.sensorsId]?.parameterName ?? "").toLowerCase() === target
+    );
+    return match ? sensorsMap[match.sensorsId]?.unit : undefined;
+  }, [latest, sensorsMap, selectedParameter]);
 
-    return (
-        <div className="p-6 max-w-4xl mx-auto">
-        <h1 className="text-2xl font-semibold">OpenAQ Dashboard</h1>
+  const chartData = measurementsToChartPoints(measurements);
 
-        <div className="mt-4 flex gap-2 items-end">
-          <label className="flex flex-col">
-            <span className="text-sm">Location ID</span>
-            <input
-              className="border rounded px-3 py-2"
-              type="number"
-              value={locationId}
-              onChange={(e) => setLocationId(Number(e.target.value))}
-            />
-          </label>
-          <label className="flex flex-col">
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-semibold">OpenAQ Dashboard</h1>
+
+      <div className="mt-4 flex gap-2 items-end">
+        <label className="flex flex-col">
+          <span className="text-sm">Location ID</span>
+          <input
+            className="border rounded px-3 py-2"
+            type="number"
+            value={locationId}
+            onChange={(e) => setLocationId(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="flex flex-col">
           <span className="text-sm">Parameter</span>
           <select
             className="border rounded px-3 py-2"
@@ -165,38 +203,50 @@ export default function Dashboard() {
             )}
           </select>
         </label>
+      </div>
+
+      {loading && <p className="mt-4">Loading…</p>}
+      {error && <p className="mt-4 text-red-600">{error}</p>}
+
+      {!loading && !error && location && (
+        <div className="mt-6 border rounded p-4">
+          <h2 className="text-lg font-medium">{location.name}</h2>
+          <p className="text-sm opacity-80">
+            {location.locality ?? "Unknown locality"} ·{" "}
+            {location.country?.name ?? "Unknown country"}
+          </p>
         </div>
+      )}
 
-        {loading && <p className="mt-4">Loading…</p>}
-        {error && <p className="mt-4 text-red-600">{error}</p>}
+      {!loading && !error && location?.coordinates && (
+        <MapView
+          latitude={location.coordinates.latitude}
+          longitude={location.coordinates.longitude}
+          title={location.name}
+          subtitle={`${location.locality ?? "Unknown locality"} · ${location.country?.name ?? "Unknown country"}`}
+          zoom={11}
+        />
+      )}
 
-        {!loading && !error && location && (
-          <div className="mt-6 border rounded p-4">
-            <h2 className="text-lg font-medium">{location.name}</h2>
+
+      {!loading && !error && (
+        <div className="mt-6">
+          {latest.length > 0 && Object.keys(sensorsMap).length === 0 ? (
+            <p className="text-sm opacity-80">Loading sensor metadata…</p>
+          ) : chartData.length === 0 ? (
             <p className="text-sm opacity-80">
-              {location.locality ?? "Unknown locality"} · {location.country?.name ?? "Unknown country"}
+              No historical measurements found for {selectedParameter.toUpperCase()} at this
+              location.
             </p>
-          </div>
-        )}
-
-        {!loading && !error && (
-          <div className="mt-6">
-            {latest.length > 0 && Object.keys(sensorsMap).length === 0 ? (
-              <p className="text-sm opacity-80">Loading sensor metadata…</p>
-            ) : filteredLatest.length === 0 ? (
-              <p className="text-sm opacity-80">
-                No measurements found for {selectedParameter.toUpperCase()} at this location.
-              </p>
-              
-            ) : (
-                <LineChartCard
-                  title={`${selectedParameter.toUpperCase()} (latest)`}
-                  subtitle={selectedUnit ? `Unit: ${selectedUnit}` : undefined}
-                  data={chartData}
-                />
+          ) : (
+            <LineChartCard
+              title={`${selectedParameter.toUpperCase()} (last 24h)`}
+              subtitle={selectedUnit ? `Unit: ${selectedUnit}` : undefined}
+              data={chartData}
+            />
           )}
         </div>
-        )}
+      )}
     </div>
-    )
+  );
 }
